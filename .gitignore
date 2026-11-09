@@ -1,0 +1,5 @@
+node_modules/
+.env
+# WhatsApp session keys: anyone with this folder can use the bot's WhatsApp account.
+auth/
+*.log
