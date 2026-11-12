@@ -15,22 +15,41 @@ const thinkingConfig = config.gemini.thinkingLevel
   ? { thinkingConfig: { thinkingLevel: config.gemini.thinkingLevel.toUpperCase() } }
   : {};
 
-// Overloaded, rate limited, or too slow: worth trying another model.
+// Overloaded, rate limited, or too slow: worth retrying or trying another model.
 const RETRYABLE = new Set([429, 500, 503, 504]);
 
-function isRetryable(err) {
+export function isRetryable(err) {
   return RETRYABLE.has(err?.status) || err?.name === 'AbortError' || /timed? ?out|aborted/i.test(err?.message || '');
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** generateContent with one retry after a short pause when the model is busy. */
+async function generate(request) {
+  try {
+    return await ai.models.generateContent(request);
+  } catch (err) {
+    if (!isRetryable(err)) throw err;
+    log.warn({ model: request.model, status: err.status }, 'model busy, retrying once');
+    await sleep(1500);
+    return ai.models.generateContent(request);
+  }
+}
+
 /**
- * generateContent on the first model that answers. Once a model has answered in this
- * conversation, later rounds stay on it (thought signatures are model-specific).
+ * Answer one question with Gemini function calling, on the first model that gets through.
+ * If a model fails mid-conversation the question starts over on the next model, because
+ * a model's function-calling turns (thought signatures) can't be handed to another model.
+ *
+ * history: [{ role: 'user' | 'model', text }] — previous turns of this chat.
+ * Returns { text, toolCalls, usage, model }.
  */
-async function generate(models, request) {
+export async function answer(ctx, question, history = []) {
+  const models = [config.gemini.model, ...config.gemini.fallbackModels];
   let lastErr;
   for (const model of models) {
     try {
-      return { model, response: await ai.models.generateContent({ ...request, model }) };
+      return await answerWith(model, ctx, question, history);
     } catch (err) {
       if (!isRetryable(err)) throw err;
       log.warn({ model, status: err.status, err: err.message?.slice(0, 200) }, 'model unavailable, trying next');
@@ -40,13 +59,7 @@ async function generate(models, request) {
   throw lastErr;
 }
 
-/**
- * Answer one question with Gemini function calling.
- *
- * history: [{ role: 'user' | 'model', text }] — previous turns of this chat.
- * Returns { text, toolCalls, usage }.
- */
-export async function answer(ctx, question, history = []) {
+async function answerWith(model, ctx, question, history) {
   const contents = [
     ...history.map((h) => ({ role: h.role, parts: [{ text: h.text }] })),
     { role: 'user', parts: [{ text: question }] },
@@ -54,11 +67,11 @@ export async function answer(ctx, question, history = []) {
 
   const toolCalls = [];
   const usage = { input: 0, output: 0 };
-  let models = [config.gemini.model, ...config.gemini.fallbackModels];
 
   for (let round = 0; round <= config.gemini.maxToolRounds; round++) {
     const t0 = Date.now();
-    const { model, response } = await generate(models, {
+    const response = await generate({
+      model,
       contents,
       config: {
         systemInstruction: systemPrompt(ctx),
@@ -67,7 +80,6 @@ export async function answer(ctx, question, history = []) {
         ...thinkingConfig,
       },
     });
-    models = [model];
     log.info({ round, model, ms: Date.now() - t0, calls: response.functionCalls?.map((c) => c.name) ?? [] }, 'gemini round');
 
     usage.input += response.usageMetadata?.promptTokenCount ?? 0;
@@ -75,7 +87,7 @@ export async function answer(ctx, question, history = []) {
 
     const calls = response.functionCalls;
     if (!calls?.length) {
-      return { text: response.text?.trim() || '', toolCalls, usage };
+      return { text: response.text?.trim() || '', toolCalls, usage, model };
     }
 
     // Keep the model's turn as-is (it carries thought signatures needed for the next call).
@@ -98,6 +110,6 @@ export async function answer(ctx, question, history = []) {
     contents.push({ role: 'user', parts });
   }
 
-  log.warn({ toolCalls }, 'tool round limit reached');
-  return { text: '', toolCalls, usage };
+  log.warn({ model, toolCalls }, 'tool round limit reached');
+  return { text: '', toolCalls, usage, model };
 }

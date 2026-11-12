@@ -1,4 +1,4 @@
-import { answer } from './ai/gemini.js';
+import { answer, isRetryable } from './ai/gemini.js';
 import { helpText } from './ai/prompt.js';
 import { config } from './config.js';
 import { resolveContext } from './identity/resolver.js';
@@ -16,6 +16,7 @@ const REPLIES = {
   busy: '⏳ Still working on your previous question…',
   rate_limited: 'You have asked a lot of questions in a short time. Please wait a few minutes.',
   error: 'Sorry, something went wrong. Please try again, or contact the office.',
+  ai_busy: '⏳ The AI service is very busy right now. Please try again in a minute.',
   empty: 'Sorry, I could not find an answer. Please contact the office.',
 };
 
@@ -85,12 +86,12 @@ export async function handleMessage(msg) {
 
     await saveTurn(msg.chatJid, msg.senderPhone, question, text);
     await logRequest({ ...entry, bil: ctx.bil, answer: text, toolCalls: result.toolCalls, usage: result.usage, latencyMs: Date.now() - started });
-    log.info({ phone: msg.senderPhone, bil: ctx.bil, tools: result.toolCalls.map((t) => t.name), ms: Date.now() - started }, 'answered');
+    log.info({ phone: msg.senderPhone, bil: ctx.bil, model: result.model, tools: result.toolCalls.map((t) => t.name), ms: Date.now() - started }, 'answered');
     return text;
   } catch (err) {
     log.error({ err }, 'failed to answer');
     await logRequest({ ...entry, error: String(err.message || err).slice(0, 1000), latencyMs: Date.now() - started });
-    return REPLIES.error;
+    return isRetryable(err) ? REPLIES.ai_busy : REPLIES.error;
   } finally {
     busy.delete(key);
   }
