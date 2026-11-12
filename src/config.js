@@ -33,6 +33,8 @@ export const config = {
     apiKey: required('GEMINI_API_KEY'),
     model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
     maxToolRounds: int('GEMINI_MAX_TOOL_ROUNDS', 5),
+    timeoutMs: int('GEMINI_TIMEOUT_MS', 30_000),
+    thinkingLevel: process.env.GEMINI_THINKING_LEVEL ?? 'low',
   },
 
   db: {

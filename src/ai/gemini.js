@@ -5,7 +5,15 @@ import { declarations, runTool } from '../tools/index.js';
 import { systemPrompt } from './prompt.js';
 
 const log = logger.child({ module: 'gemini' });
-const ai = new GoogleGenAI({ apiKey: config.gemini.apiKey });
+const ai = new GoogleGenAI({
+  apiKey: config.gemini.apiKey,
+  httpOptions: { timeout: config.gemini.timeoutMs },
+});
+
+// Trip lookups don't need deep reasoning; a low level keeps replies fast. Empty = model default.
+const thinkingConfig = config.gemini.thinkingLevel
+  ? { thinkingConfig: { thinkingLevel: config.gemini.thinkingLevel.toUpperCase() } }
+  : {};
 
 /**
  * Answer one question with Gemini function calling.
@@ -23,6 +31,7 @@ export async function answer(ctx, question, history = []) {
   const usage = { input: 0, output: 0 };
 
   for (let round = 0; round <= config.gemini.maxToolRounds; round++) {
+    const t0 = Date.now();
     const response = await ai.models.generateContent({
       model: config.gemini.model,
       contents,
@@ -30,8 +39,10 @@ export async function answer(ctx, question, history = []) {
         systemInstruction: systemPrompt(ctx),
         tools: [{ functionDeclarations: declarations }],
         temperature: 0.2,
+        ...thinkingConfig,
       },
     });
+    log.info({ round, ms: Date.now() - t0, calls: response.functionCalls?.map((c) => c.name) ?? [] }, 'gemini round');
 
     usage.input += response.usageMetadata?.promptTokenCount ?? 0;
     usage.output += response.usageMetadata?.candidatesTokenCount ?? 0;
@@ -47,8 +58,10 @@ export async function answer(ctx, question, history = []) {
     const parts = [];
     for (const call of calls) {
       let result;
+      const t1 = Date.now();
       try {
         result = await runTool(call.name, call.args, ctx);
+        log.info({ tool: call.name, args: call.args, ms: Date.now() - t1 }, 'tool done');
       } catch (err) {
         log.error({ err, tool: call.name }, 'tool failed');
         result = { error: 'The WTT database could not be read right now.' };

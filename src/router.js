@@ -73,6 +73,7 @@ export async function handleMessage(msg) {
 
   try {
     const ctx = await resolveContext({ senderPhone: msg.senderPhone });
+    log.info({ ms: Date.now() - started, ok: ctx.ok, bil: ctx.bil, staff: ctx.isStaff }, 'context resolved');
     if (!ctx.ok) {
       await logRequest({ ...entry, error: ctx.reason, latencyMs: Date.now() - started });
       return REPLIES[ctx.reason];
