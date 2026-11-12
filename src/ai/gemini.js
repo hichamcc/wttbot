@@ -50,17 +50,25 @@ async function generate(request) {
  */
 export async function answer(ctx, question, history = []) {
   const models = [config.gemini.model, ...config.gemini.fallbackModels];
+  let busyErr;
   let lastErr;
   for (const model of models) {
     try {
       return await answerWith(model, ctx, question, history);
     } catch (err) {
+      lastErr = err;
+      if (err.status === 404) {
+        // A typo or retired model in .env shouldn't take the bot down while other models work.
+        log.error({ model }, 'model not found: fix GEMINI_MODEL / GEMINI_FALLBACK_MODELS in .env');
+        continue;
+      }
       if (!isRetryable(err)) throw err;
       log.warn({ model, status: err.status, err: err.message?.slice(0, 200) }, 'model unavailable, trying next');
-      lastErr = err;
+      busyErr = err;
     }
   }
-  throw lastErr;
+  // Report "busy" over "not found" so the user gets the try-again-later reply.
+  throw busyErr || lastErr;
 }
 
 async function answerWith(model, ctx, question, history) {

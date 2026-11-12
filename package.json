@@ -12,7 +12,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "check:mapon": "node scripts/check-mapon.js",
-    "ask": "node scripts/ask.js"
+    "ask": "node scripts/ask.js",
+    "models": "node scripts/list-models.js"
   },
   "dependencies": {
     "@google/genai": "2.32.0",
