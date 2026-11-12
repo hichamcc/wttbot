@@ -80,6 +80,41 @@ export async function findDriverByPhone(phone) {
   return drivers.find((d) => driverPhone(d) === phone) || null;
 }
 
+/** Lowercase, strip accents ("Łukasz Żak" -> "lukasz zak"). */
+function foldName(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/ł/gi, 'l')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Mapon drivers matching a typed name. Every word typed must appear in the driver's
+ * full name, so "jan kow" finds "Jan Kowalski". Exact full-name matches win, then
+ * whole-word matches ("kowal" prefers "Janusz Kowal" over "Jan Kowalski").
+ */
+export async function findDriversByName(text) {
+  const words = foldName(text).split(' ').filter(Boolean);
+  if (!words.length) return [];
+
+  const drivers = await getDrivers();
+  const hits = drivers.filter((d) => {
+    const full = foldName(driverName(d));
+    return words.every((w) => full.includes(w));
+  });
+
+  const exact = hits.filter((d) => foldName(driverName(d)) === words.join(' '));
+  if (exact.length) return exact;
+  const wholeWords = hits.filter((d) => {
+    const parts = foldName(driverName(d)).split(' ');
+    return words.every((w) => parts.includes(w));
+  });
+  return wholeWords.length ? wholeWords : hits;
+}
+
 /** Unit the driver is currently assigned to (driver1 or driver2 on the unit). */
 export async function findUnitForDriver(driver) {
   const units = await getUnits();

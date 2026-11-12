@@ -37,7 +37,9 @@ On the VPS: `pm2 start src/index.js --name wtt-bot`. The first start must be int
   current unit (`unit/list.json?include[]=drivers`), which is matched to `delivery.bil` with the same
   plate rules as `admin/mapon_truck_check.php`. They only ever see their own truck's trips.
 - **`wa_phone_overrides`** links a number to a truck by hand, or marks it as office staff
-  (`is_staff = 1`). Staff can ask about any truck ("/bot next trip for ZK2367M").
+  (`is_staff = 1`). Staff can ask about any truck ("/bot next trip for ZK2367M") or any driver
+  by name ("/bot where does Jan Kowalski deliver today?"). The bot looks the name up in Mapon and
+  uses the truck that driver is on now; if several drivers match, it asks which one.
 
 ```sql
 INSERT INTO wa_phone_overrides (phone, display_name, bil, is_staff) VALUES ('+4512345678', 'Anna (office)', NULL, 1);

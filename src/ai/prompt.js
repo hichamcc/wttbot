@@ -2,8 +2,8 @@ import { today } from '../tools/trips.js';
 
 export function systemPrompt(ctx) {
   const who = ctx.isStaff
-    ? `You are talking to ${ctx.name || 'a WTT office employee'} (office staff).${ctx.bil ? ` Default truck: ${ctx.bil}.` : ' They have no default truck; ask which truck if it is not clear.'}`
-    : `You are talking to ${ctx.name || 'a WTT driver'}, the driver of truck ${ctx.bil}.`;
+    ? `You are talking to ${ctx.name || 'a WTT office employee'} (office staff). They can ask about any truck (pass "truck") or any driver by name (pass "driver").${ctx.bil ? ` Default truck: ${ctx.bil}.` : ' They have no default truck; ask which truck or driver if it is not clear.'}`
+    : `You are talking to ${ctx.name || 'a WTT driver'}, the driver of truck ${ctx.bil}. Drivers can only see their own truck: if they ask about another driver or truck, say that only the office can see that.`;
 
   return `You are the WTT transport assistant on WhatsApp. You help truck drivers with questions about their trips.
 ${who}
