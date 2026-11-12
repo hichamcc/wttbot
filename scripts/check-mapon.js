@@ -28,6 +28,18 @@ for (const d of drivers) {
   rows.push({ name: driverName(d), phone: phone || '-', unit: unit?.label || '-', bil: bil || '-' });
 }
 
+// Raw phone formats, digits masked, to see why numbers don't parse.
+const raw = drivers.map((d) => String(d.phone ?? '').trim()).filter(Boolean);
+const mask = (p) => p.slice(0, 3) + p.slice(3).replace(/\d/g, '#');
+const formats = {};
+for (const p of raw) formats[mask(p)] = (formats[mask(p)] || 0) + 1;
+console.log(`\nPhone field filled in: ${raw.length}/${drivers.length}`);
+console.log(`Blocked drivers:       ${drivers.filter((d) => d.blocked && d.blocked !== '0').length}`);
+console.log('Most common phone formats (digits after the 3rd character masked):');
+for (const [f, n] of Object.entries(formats).sort((a, b) => b[1] - a[1]).slice(0, 15)) {
+  console.log(`  ${String(n).padStart(4)}  "${f}"`);
+}
+
 console.log(`\nWith a valid phone:              ${counts.phone}/${drivers.length}`);
 console.log(`Assigned to a unit now:          ${counts.unit}/${drivers.length}`);
 console.log(`Ready for the bot (phone+truck): ${counts.truck}/${drivers.length}`);
