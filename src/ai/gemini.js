@@ -24,12 +24,16 @@ export function isRetryable(err) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** generateContent with one retry after a short pause when the model is busy. */
+/**
+ * generateContent with one retry after a short pause when the model is busy.
+ * A 429 is a quota limit, not a blip: retrying the same model only burns more quota,
+ * so it goes straight to the next model instead.
+ */
 async function generate(request) {
   try {
     return await ai.models.generateContent(request);
   } catch (err) {
-    if (!isRetryable(err)) throw err;
+    if (!isRetryable(err) || err.status === 429) throw err;
     log.warn({ model: request.model, status: err.status }, 'model busy, retrying once');
     await sleep(1500);
     return ai.models.generateContent(request);

@@ -17,6 +17,7 @@ const REPLIES = {
   rate_limited: 'You have asked a lot of questions in a short time. Please wait a few minutes.',
   error: 'Sorry, something went wrong. Please try again, or contact the office.',
   ai_busy: '⏳ The AI service is very busy right now. Please try again in a minute.',
+  ai_quota: '⏳ Too many questions right now. Please try again in a minute.',
   empty: 'Sorry, I could not find an answer. Please contact the office.',
 };
 
@@ -91,6 +92,7 @@ export async function handleMessage(msg) {
   } catch (err) {
     log.error({ err }, 'failed to answer');
     await logRequest({ ...entry, error: String(err.message || err).slice(0, 1000), latencyMs: Date.now() - started });
+    if (err.status === 429) return REPLIES.ai_quota;
     return isRetryable(err) ? REPLIES.ai_busy : REPLIES.error;
   } finally {
     busy.delete(key);
