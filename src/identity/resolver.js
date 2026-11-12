@@ -54,5 +54,6 @@ export async function resolveContext({ senderPhone }) {
     return { ok: false, phone, name, reason: 'no_truck' };
   }
 
-  return { ok: true, phone, name, bil, isStaff: false, source: 'mapon' };
+  // Mapon's driver language (e.g. "pl") is the reply language when a message is too short to tell.
+  return { ok: true, phone, name, bil, isStaff: false, source: 'mapon', language: driver.language || null };
 }

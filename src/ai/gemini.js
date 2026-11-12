@@ -24,19 +24,25 @@ export function isRetryable(err) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** One generateContent call, cancelled client-side after GEMINI_TIMEOUT_MS. */
+function call(request) {
+  const abortSignal = AbortSignal.timeout(config.gemini.timeoutMs);
+  return ai.models.generateContent({ ...request, config: { ...request.config, abortSignal } });
+}
+
 /**
- * generateContent with one retry after a short pause when the model is busy.
- * A 429 is a quota limit, not a blip: retrying the same model only burns more quota,
- * so it goes straight to the next model instead.
+ * generateContent, optionally with one retry after a short pause when the model is busy.
+ * Only the last model in the list retries: while other models are left, moving on is faster.
+ * A 429 is a quota limit, not a blip, so it is never retried on the same model.
  */
-async function generate(request) {
+async function generate(request, { retry }) {
   try {
-    return await ai.models.generateContent(request);
+    return await call(request);
   } catch (err) {
-    if (!isRetryable(err) || err.status === 429) throw err;
+    if (!retry || !isRetryable(err) || err.status === 429) throw err;
     log.warn({ model: request.model, status: err.status }, 'model busy, retrying once');
     await sleep(1500);
-    return ai.models.generateContent(request);
+    return call(request);
   }
 }
 
@@ -52,9 +58,9 @@ export async function answer(ctx, question, history = []) {
   const models = [config.gemini.model, ...config.gemini.fallbackModels];
   let busyErr;
   let lastErr;
-  for (const model of models) {
+  for (const [i, model] of models.entries()) {
     try {
-      return await answerWith(model, ctx, question, history);
+      return await answerWith(model, ctx, question, history, { retry: i === models.length - 1 });
     } catch (err) {
       lastErr = err;
       if (err.status === 404) {
@@ -71,7 +77,7 @@ export async function answer(ctx, question, history = []) {
   throw busyErr || lastErr;
 }
 
-async function answerWith(model, ctx, question, history) {
+async function answerWith(model, ctx, question, history, { retry }) {
   const contents = [
     ...history.map((h) => ({ role: h.role, parts: [{ text: h.text }] })),
     { role: 'user', parts: [{ text: question }] },
@@ -91,7 +97,7 @@ async function answerWith(model, ctx, question, history) {
         temperature: 0.2,
         ...thinkingConfig,
       },
-    });
+    }, { retry });
     log.info({ round, model, ms: Date.now() - t0, calls: response.functionCalls?.map((c) => c.name) ?? [] }, 'gemini round');
 
     usage.input += response.usageMetadata?.promptTokenCount ?? 0;
