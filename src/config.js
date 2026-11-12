@@ -31,7 +31,7 @@ export const config = {
 
   gemini: {
     apiKey: required('GEMINI_API_KEY'),
-    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
     maxToolRounds: int('GEMINI_MAX_TOOL_ROUNDS', 5),
   },
 
