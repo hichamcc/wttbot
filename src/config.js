@@ -32,8 +32,10 @@ export const config = {
   gemini: {
     apiKey: required('GEMINI_API_KEY'),
     model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+    // Tried in order when the main model is overloaded or times out.
+    fallbackModels: list('GEMINI_FALLBACK_MODELS'),
     maxToolRounds: int('GEMINI_MAX_TOOL_ROUNDS', 5),
-    timeoutMs: int('GEMINI_TIMEOUT_MS', 30_000),
+    timeoutMs: int('GEMINI_TIMEOUT_MS', 20_000),
     thinkingLevel: process.env.GEMINI_THINKING_LEVEL ?? 'low',
   },
 

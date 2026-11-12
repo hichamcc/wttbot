@@ -15,6 +15,31 @@ const thinkingConfig = config.gemini.thinkingLevel
   ? { thinkingConfig: { thinkingLevel: config.gemini.thinkingLevel.toUpperCase() } }
   : {};
 
+// Overloaded, rate limited, or too slow: worth trying another model.
+const RETRYABLE = new Set([429, 500, 503, 504]);
+
+function isRetryable(err) {
+  return RETRYABLE.has(err?.status) || err?.name === 'AbortError' || /timed? ?out|aborted/i.test(err?.message || '');
+}
+
+/**
+ * generateContent on the first model that answers. Once a model has answered in this
+ * conversation, later rounds stay on it (thought signatures are model-specific).
+ */
+async function generate(models, request) {
+  let lastErr;
+  for (const model of models) {
+    try {
+      return { model, response: await ai.models.generateContent({ ...request, model }) };
+    } catch (err) {
+      if (!isRetryable(err)) throw err;
+      log.warn({ model, status: err.status, err: err.message?.slice(0, 200) }, 'model unavailable, trying next');
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * Answer one question with Gemini function calling.
  *
@@ -29,11 +54,11 @@ export async function answer(ctx, question, history = []) {
 
   const toolCalls = [];
   const usage = { input: 0, output: 0 };
+  let models = [config.gemini.model, ...config.gemini.fallbackModels];
 
   for (let round = 0; round <= config.gemini.maxToolRounds; round++) {
     const t0 = Date.now();
-    const response = await ai.models.generateContent({
-      model: config.gemini.model,
+    const { model, response } = await generate(models, {
       contents,
       config: {
         systemInstruction: systemPrompt(ctx),
@@ -42,7 +67,8 @@ export async function answer(ctx, question, history = []) {
         ...thinkingConfig,
       },
     });
-    log.info({ round, ms: Date.now() - t0, calls: response.functionCalls?.map((c) => c.name) ?? [] }, 'gemini round');
+    models = [model];
+    log.info({ round, model, ms: Date.now() - t0, calls: response.functionCalls?.map((c) => c.name) ?? [] }, 'gemini round');
 
     usage.input += response.usageMetadata?.promptTokenCount ?? 0;
     usage.output += response.usageMetadata?.candidatesTokenCount ?? 0;
