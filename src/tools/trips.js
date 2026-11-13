@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { query } from '../db.js';
 import { logger } from '../logger.js';
+import { settings } from '../settings.js';
 
 const log = logger.child({ module: 'trips' });
 
@@ -10,10 +11,6 @@ const LOAD_DATE = "STR_TO_DATE(LEFT(REPLACE(d.last, '-', '/'), 10), '%d/%m/%Y')"
 const DEL_DATE = "STR_TO_DATE(LEFT(REPLACE(d.levdato, '-', '/'), 10), '%d/%m/%Y')";
 
 const ACTIVE = "(d.status IS NULL OR d.status = 'active')";
-
-// Free-text trip fields shown to the driver. Confirm with the client that none of these
-// hold office-only information before going live.
-const TEXT_FIELDS = ['cargoref', 'unload_ref', 'temp', 'load_type', 'notes', 'info'];
 
 const PICKUP_COLS = ['afhent1', 'afhent2', 'afhent3', 'afhent4'];
 const DELIVERY_COLS = ['lev1', 'lev2', 'lev3'];
@@ -161,7 +158,8 @@ export async function getTripDetails(bil, tripId) {
       loading_date: row.last,
       delivery_date: row.levdato,
       trailer: row.trailer,
-      ...Object.fromEntries(TEXT_FIELDS.map((f) => [f, row[f]])),
+      // Free-text fields chosen on the dashboard (whitelisted in settings.js).
+      ...Object.fromEntries(settings().trip_text_fields.map((f) => [f, row[f]])),
     }),
     stops: await stopsForTrip(row),
   };

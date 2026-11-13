@@ -52,6 +52,19 @@ for the pilot, list the test group JIDs (an unlisted group's JID is logged whene
 In a group the bot answers about the asker's own truck. Phase 2 adds group → truck mapping and
 automatic truck groups in `src/identity/resolver.js`.
 
+## Admin dashboard
+
+`/admin/whatsapp_bot/` in WTTsystem, visible only to the user `admin`:
+
+- **Dashboard:** whether the bot is online (heartbeat every minute), the QR code when WhatsApp needs linking, usage, errors and which AI model answered.
+- **Settings:** bot on/off, trigger word, allowed groups, AI models, limits, the trip fields drivers may see, extra AI instructions and reply texts. Saved in `wa_settings`; the bot reloads them every minute. An empty field means the `.env` default. API keys stay in `.env`.
+- **Phone numbers:** manages `wa_phone_overrides`, including numbers that recently tried the bot without being registered.
+- **Conversation log:** every question and answer, with filters.
+
+Setup: run `admin/whatsapp_bot/schema.sql` once. It creates `wa_settings` and `wa_status`, adds `wa_logs.model` and grants the bot user access.
+
+If WhatsApp unlinks the bot (logged out), the bot clears its session and shows a new QR code on the dashboard. No SSH needed.
+
 ## Reviewing the pilot
 
 ```sql

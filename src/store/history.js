@@ -1,19 +1,21 @@
-import { config } from '../config.js';
 import { query } from '../db.js';
 import { logger } from '../logger.js';
+import { settings } from '../settings.js';
 
 const log = logger.child({ module: 'history' });
 
 /** Last HISTORY_TURNS question/answer pairs for this person in this chat, oldest first. */
 export async function loadHistory(chatJid, phone) {
-  const limit = config.history.turns * 2;
+  const { history_turns: turns, history_max_age_minutes: maxAge } = settings();
+  if (!turns) return [];
+  const limit = turns * 2;
   try {
     const rows = await query(
       `SELECT role, text FROM wa_messages
        WHERE chat_jid = ? AND phone = ? AND cleared = 0
          AND created_at >= NOW() - INTERVAL ? MINUTE
        ORDER BY id DESC LIMIT ${limit}`,
-      [chatJid, phone, config.history.maxAgeMinutes],
+      [chatJid, phone, maxAge],
     );
     return rows.reverse();
   } catch (err) {
@@ -40,8 +42,8 @@ export async function clearHistory(chatJid, phone) {
 export async function logRequest(entry) {
   try {
     await query(
-      `INSERT INTO wa_logs (chat_jid, phone, is_group, bil, question, answer, tool_calls, tokens_in, tokens_out, latency_ms, error)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO wa_logs (chat_jid, phone, is_group, bil, question, answer, tool_calls, model, tokens_in, tokens_out, latency_ms, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.chatJid,
         entry.phone,
@@ -50,6 +52,7 @@ export async function logRequest(entry) {
         entry.question,
         entry.answer ?? null,
         entry.toolCalls ? JSON.stringify(entry.toolCalls) : null,
+        entry.model ?? null,
         entry.usage?.input ?? null,
         entry.usage?.output ?? null,
         entry.latencyMs ?? null,

@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS wa_logs (
   question   TEXT         NOT NULL,
   answer     TEXT         NULL,
   tool_calls JSON         NULL,
+  model      VARCHAR(64)  NULL,
   tokens_in  INT          NULL,
   tokens_out INT          NULL,
   latency_ms INT          NULL,
@@ -41,6 +42,27 @@ CREATE TABLE IF NOT EXISTS wa_logs (
   created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_created (created_at),
   KEY idx_phone (phone)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Settings edited from the admin dashboard (admin/whatsapp_bot/settings.php).
+-- A missing row means "use the .env default".
+CREATE TABLE IF NOT EXISTS wa_settings (
+  name       VARCHAR(64)  NOT NULL PRIMARY KEY,
+  value      TEXT         NULL,
+  updated_by VARCHAR(100) NULL,
+  updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Single row (id = 1) written by the bot: connection state, QR code for linking, heartbeat.
+CREATE TABLE IF NOT EXISTS wa_status (
+  id            TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+  state         VARCHAR(20)  NOT NULL,
+  phone         VARCHAR(20)  NULL,
+  qr            TEXT         NULL,
+  version       VARCHAR(20)  NULL,
+  settings_json TEXT         NULL COMMENT 'Effective settings the bot is using right now',
+  started_at    TIMESTAMP    NULL,
+  last_seen     TIMESTAMP    NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Bot database user: read-only on WTT tables, read/write only on its own wa_* tables.
@@ -55,3 +77,5 @@ CREATE TABLE IF NOT EXISTS wa_logs (
 -- GRANT SELECT, INSERT, UPDATE ON h762997_wttsystemdk.wa_phone_overrides TO 'wtt_bot'@'localhost';
 -- GRANT SELECT, INSERT, UPDATE ON h762997_wttsystemdk.wa_messages        TO 'wtt_bot'@'localhost';
 -- GRANT SELECT, INSERT         ON h762997_wttsystemdk.wa_logs            TO 'wtt_bot'@'localhost';
+-- GRANT SELECT                 ON h762997_wttsystemdk.wa_settings        TO 'wtt_bot'@'localhost';
+-- GRANT SELECT, INSERT, UPDATE ON h762997_wttsystemdk.wa_status          TO 'wtt_bot'@'localhost';

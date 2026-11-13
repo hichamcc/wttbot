@@ -1,19 +1,18 @@
 import { GoogleGenAI } from '@google/genai';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
+import { settings } from '../settings.js';
 import { declarations, runTool } from '../tools/index.js';
 import { systemPrompt } from './prompt.js';
 
 const log = logger.child({ module: 'gemini' });
-const ai = new GoogleGenAI({
-  apiKey: config.gemini.apiKey,
-  httpOptions: { timeout: config.gemini.timeoutMs },
-});
+const ai = new GoogleGenAI({ apiKey: config.gemini.apiKey });
 
 // Trip lookups don't need deep reasoning; a low level keeps replies fast. Empty = model default.
-const thinkingConfig = config.gemini.thinkingLevel
-  ? { thinkingConfig: { thinkingLevel: config.gemini.thinkingLevel.toUpperCase() } }
-  : {};
+function thinkingConfig() {
+  const level = settings().gemini_thinking_level;
+  return level ? { thinkingConfig: { thinkingLevel: level.toUpperCase() } } : {};
+}
 
 // Overloaded, rate limited, or too slow: worth retrying or trying another model.
 const RETRYABLE = new Set([429, 500, 503, 504]);
@@ -26,7 +25,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** One generateContent call, cancelled client-side after GEMINI_TIMEOUT_MS. */
 function call(request) {
-  const abortSignal = AbortSignal.timeout(config.gemini.timeoutMs);
+  const abortSignal = AbortSignal.timeout(settings().gemini_timeout_ms);
   return ai.models.generateContent({ ...request, config: { ...request.config, abortSignal } });
 }
 
@@ -55,7 +54,8 @@ async function generate(request, { retry }) {
  * Returns { text, toolCalls, usage, model }.
  */
 export async function answer(ctx, question, history = []) {
-  const models = [config.gemini.model, ...config.gemini.fallbackModels];
+  const { gemini_model, gemini_fallback_models } = settings();
+  const models = [...new Set([gemini_model, ...gemini_fallback_models])];
   let busyErr;
   let lastErr;
   for (const [i, model] of models.entries()) {
@@ -95,7 +95,7 @@ async function answerWith(model, ctx, question, history, { retry }) {
         systemInstruction: systemPrompt(ctx),
         tools: [{ functionDeclarations: declarations }],
         temperature: 0.2,
-        ...thinkingConfig,
+        ...thinkingConfig(),
       },
     }, { retry });
     log.info({ round, model, ms: Date.now() - t0, calls: response.functionCalls?.map((c) => c.name) ?? [] }, 'gemini round');

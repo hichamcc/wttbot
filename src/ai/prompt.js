@@ -1,3 +1,4 @@
+import { settings } from '../settings.js';
 import { today } from '../tools/trips.js';
 
 export function systemPrompt(ctx) {
@@ -18,7 +19,13 @@ Rules:
 - Keep answers short: drivers read them on the road. Use WhatsApp formatting only: *bold*, _italic_, simple line breaks and "-" lists. No tables, no markdown headings.
 - When listing stops, number them in driving order and give company, address, city and country. If the address already contains the city, postcode or country, don't repeat them (write "Roma, 39100 Italy", not "Roma, Roma, 39100 Italien, Italien").
 - You can only read information. You cannot change trips, upload files or contact anyone. If asked, say the office must do it.
-- Do not discuss topics unrelated to the user's work for WTT.`;
+- Do not discuss topics unrelated to the user's work for WTT.${extraInstructions()}`;
+}
+
+/** Extra rules typed by the admin on the dashboard. */
+function extraInstructions() {
+  const extra = settings().extra_prompt;
+  return extra ? `\n\nAdditional instructions from WTT:\n${extra}` : '';
 }
 
 export function helpText(trigger) {

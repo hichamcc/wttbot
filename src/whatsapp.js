@@ -8,11 +8,14 @@ import makeWASocket, {
   makeCacheableSignalKeyStore,
   useMultiFileAuthState,
 } from 'baileys';
+import { rm } from 'node:fs/promises';
 import qrcode from 'qrcode-terminal';
 import { config } from './config.js';
 import { phoneFromJid } from './identity/phone.js';
 import { logger } from './logger.js';
 import { handleMessage, parseTrigger } from './router.js';
+import { settings } from './settings.js';
+import { setStatus } from './store/status.js';
 
 const log = logger.child({ module: 'whatsapp' });
 const baileysLogger = logger.child({ module: 'baileys' }, { level: 'warn' });
@@ -62,8 +65,9 @@ async function onMessage(sock, msg) {
   if (parseTrigger(text) === null) return;
 
   const isGroup = Boolean(isJidGroup(chatJid));
-  if (isGroup && config.whatsapp.allowedGroups.length && !config.whatsapp.allowedGroups.includes(chatJid)) {
-    log.info({ chatJid }, 'trigger in a group not in ALLOWED_GROUPS (add this JID to enable)');
+  const allowedGroups = settings().allowed_groups;
+  if (isGroup && allowedGroups.length && !allowedGroups.includes(chatJid)) {
+    log.info({ chatJid }, 'trigger in a group not in allowed groups (add this JID on the dashboard to enable)');
     return;
   }
 
@@ -95,17 +99,29 @@ export async function startWhatsApp() {
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
     if (qr) {
-      log.info('Scan this QR code with the bot phone: WhatsApp > Linked devices > Link a device');
+      log.info('Scan this QR code (here or on the admin dashboard): WhatsApp > Linked devices > Link a device');
       qrcode.generate(qr, { small: true });
+      setStatus({ state: 'qr', qr });
     }
-    if (connection === 'open') log.info({ me: sock.user?.id }, 'WhatsApp connected');
+    if (connection === 'open') {
+      log.info({ me: sock.user?.id }, 'WhatsApp connected');
+      setStatus({ state: 'connected', phone: phoneFromJid(sock.user?.id), qr: null });
+    }
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) {
-        log.error(`Logged out from WhatsApp. Delete ${config.whatsapp.authDir} and restart to link again.`);
-        process.exit(1);
+        // The session is dead (unlinked from the phone). Start a fresh one so a new QR code
+        // appears on the dashboard instead of the bot crashing in a loop.
+        log.error('Logged out from WhatsApp: clearing the session, scan the new QR code to link again');
+        setStatus({ state: 'logged_out', phone: null, qr: null });
+        setTimeout(async () => {
+          await rm(config.whatsapp.authDir, { recursive: true, force: true });
+          startWhatsApp().catch((err) => log.error({ err }, 'restart after logout failed'));
+        }, 3000);
+        return;
       }
       log.warn({ code }, 'connection closed, reconnecting in 3s');
+      setStatus({ state: 'disconnected', qr: null });
       setTimeout(() => startWhatsApp().catch((err) => log.error({ err }, 'reconnect failed')), 3000);
     }
   });

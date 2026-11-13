@@ -4,6 +4,7 @@
 import { pool } from '../src/db.js';
 import { normalizePhone } from '../src/identity/phone.js';
 import { handleMessage } from '../src/router.js';
+import { loadSettings, settings } from '../src/settings.js';
 
 const [rawPhone, ...words] = process.argv.slice(2);
 const phone = normalizePhone(rawPhone);
@@ -12,8 +13,12 @@ if (!phone || !words.length) {
   process.exit(1);
 }
 
+// Same settings as the running bot (dashboard values over .env).
+await loadSettings().catch((err) => console.warn(`wa_settings not readable, using .env: ${err.message}`));
+if (!settings().bot_enabled) console.warn('Note: the bot is switched OFF on the dashboard, so it will not reply.');
+
 let text = words.join(' ');
-if (!text.trim().startsWith('/')) text = `/bot ${text}`;
+if (!text.trim().toLowerCase().startsWith(settings().trigger)) text = `${settings().trigger} ${text}`;
 
 const reply = await handleMessage({ chatJid: `cli:${phone}`, isGroup: false, senderPhone: phone, text });
 console.log(reply ?? '(no reply: message was not addressed to the bot)');
